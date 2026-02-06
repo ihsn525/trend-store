@@ -1,7 +1,7 @@
 Digital Store: Full-Stack E-Commerce Application
 A premium, responsive e-commerce platform built as part of a Web Programming digital assignment. This project demonstrates a complete integration between a modern React frontend and a Firebase cloud backend.
 
-🚀 Click Here for Live Demo
+For Live Demo: https://trend-store-eight.vercel.app/
 🛠 Technical Architecture
 This application follows a Serverless Architecture using the following stack:
 
