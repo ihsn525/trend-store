@@ -40,7 +40,7 @@ Multi-step checkout process with form validation.
 Unique Order ID generation and automatic stock-to-order mapping.
 
 4. Admin Command Center
-A private dashboard accessible only to: ihsansiju466@gmail.com.
+A private dashboard accessible only to the developer.
 
 Order Management: View all customer orders and update shipping status (Processing, Shipped, Delivered).
 
