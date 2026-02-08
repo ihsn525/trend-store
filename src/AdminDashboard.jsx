@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { db } from './firebase';
+import { db, storage } from './firebase'; // Ensure storage is exported from firebase.js
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, orderBy, query } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'; // Added Storage imports
 
 function AdminDashboard({ onBack }) {
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("orders"); // "orders" or "inventory"
+  const [activeTab, setActiveTab] = useState("orders");
 
-  // New Product Form State
+  // New State for Image Source Choice
+  const [imageSource, setImageSource] = useState("url"); // "url" or "upload"
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+
   const [newP, setNewP] = useState({ name: '', price: '', category: 'Tech', image: '', desc: '' });
 
   useEffect(() => {
@@ -31,17 +36,52 @@ function AdminDashboard({ onBack }) {
     }
   };
 
+  // Logic to handle the file upload to Firebase Storage
+  const uploadImage = async () => {
+    if (!selectedFile) return null;
+    try {
+      setIsUploading(true);
+      const storageRef = ref(storage, `products/${Date.now()}_${selectedFile.name}`);
+      const snapshot = await uploadBytes(storageRef, selectedFile);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      return downloadURL;
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Image upload failed!");
+      return null;
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleAddProduct = async (e) => {
     e.preventDefault();
+    let finalImageUrl = newP.image;
+
+    // If user chose to upload a file, do that first
+    if (imageSource === "upload") {
+      const uploadedUrl = await uploadImage();
+      if (!uploadedUrl) return; // Stop if upload failed
+      finalImageUrl = uploadedUrl;
+    }
+
     try {
       const docRef = await addDoc(collection(db, "products"), {
         ...newP,
-        price: Number(newP.price)
+        image: finalImageUrl,
+        price: Number(newP.price),
+        createdAt: new Date()
       });
-      setProducts([...products, { id: docRef.id, ...newP, price: Number(newP.price) }]);
+      
+      setProducts([...products, { id: docRef.id, ...newP, image: finalImageUrl, price: Number(newP.price) }]);
+      
+      // Reset Form
       setNewP({ name: '', price: '', category: 'Tech', image: '', desc: '' });
+      setSelectedFile(null);
       alert("Product added successfully!");
-    } catch (err) { alert("Error adding product"); }
+    } catch (err) { 
+      alert("Error adding product to database"); 
+    }
   };
 
   const handleDeleteProduct = async (id) => {
@@ -73,34 +113,34 @@ function AdminDashboard({ onBack }) {
         </div>
 
         {activeTab === "orders" ? (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid #eee', textAlign: 'left', color: 'var(--gray)' }}>
-                <th style={{ padding: '10px' }}>Order ID</th>
-                <th>Customer</th>
-                <th>Total</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map(order => (
-                <tr key={order.id} style={{ borderBottom: '1px solid #f9f9f9' }}>
-                  <td style={{ padding: '15px 10px', fontSize: '0.8rem' }}>#{order.id.slice(0,8)}</td>
-                  <td>{order.customerName}</td>
-                  <td style={{ fontWeight: '700' }}>${order.totalAmount?.toFixed(2)}</td>
-                  <td><span className="order-status">{order.status}</span></td>
-                  <td>
-                    <select value={order.status} onChange={(e) => updateStatus(order.id, e.target.value)}>
-                      <option value="Processing">Processing</option>
-                      <option value="Shipped">Shipped</option>
-                      <option value="Delivered">Delivered</option>
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+             <thead>
+               <tr style={{ borderBottom: '2px solid #eee', textAlign: 'left', color: 'var(--gray)' }}>
+                 <th style={{ padding: '10px' }}>Order ID</th>
+                 <th>Customer</th>
+                 <th>Total</th>
+                 <th>Status</th>
+                 <th>Action</th>
+               </tr>
+             </thead>
+             <tbody>
+               {orders.map(order => (
+                 <tr key={order.id} style={{ borderBottom: '1px solid #f9f9f9' }}>
+                   <td style={{ padding: '15px 10px', fontSize: '0.8rem' }}>#{order.id.slice(0,8)}</td>
+                   <td>{order.customerName}</td>
+                   <td style={{ fontWeight: '700' }}>${order.totalAmount?.toFixed(2)}</td>
+                   <td><span className="order-status">{order.status}</span></td>
+                   <td>
+                     <select value={order.status} onChange={(e) => updateStatus(order.id, e.target.value)}>
+                       <option value="Processing">Processing</option>
+                       <option value="Shipped">Shipped</option>
+                       <option value="Delivered">Delivered</option>
+                     </select>
+                   </td>
+                 </tr>
+               ))}
+             </tbody>
+           </table>
         ) : (
           <div className="inventory-section">
             <form onSubmit={handleAddProduct} className="order-summary" style={{ marginBottom: '40px', textAlign: 'left' }}>
@@ -116,9 +156,29 @@ function AdminDashboard({ onBack }) {
                     <option value="Accessories">Accessories</option>
                   </select>
                 </div>
-                <input className="premium-input" placeholder="Image URL" value={newP.image} onChange={e => setNewP({...newP, image: e.target.value})} required />
+
+                {/* IMAGE SOURCE TOGGLE */}
+                <div style={{ marginBottom: '10px', fontSize: '0.8rem', color: 'var(--gray)' }}>
+                  Image Source: 
+                  <label style={{ marginLeft: '15px' }}>
+                    <input type="radio" checked={imageSource === 'url'} onChange={() => setImageSource('url')} /> URL
+                  </label>
+                  <label style={{ marginLeft: '15px' }}>
+                    <input type="radio" checked={imageSource === 'upload'} onChange={() => setImageSource('upload')} /> Upload File
+                  </label>
+                </div>
+
+                {imageSource === 'url' ? (
+                  <input className="premium-input" placeholder="Image URL (https://...)" value={newP.image} onChange={e => setNewP({...newP, image: e.target.value})} required />
+                ) : (
+                  <input className="premium-input" type="file" accept="image/*" onChange={e => setSelectedFile(e.target.files[0])} required />
+                )}
+
                 <textarea className="premium-input" style={{ height: '80px' }} placeholder="Description" value={newP.desc} onChange={e => setNewP({...newP, desc: e.target.value})} required />
-                <button type="submit" className="checkout-btn-main">List Product</button>
+                
+                <button type="submit" className="checkout-btn-main" disabled={isUploading}>
+                  {isUploading ? "Uploading Image..." : "List Product"}
+                </button>
               </div>
             </form>
 
