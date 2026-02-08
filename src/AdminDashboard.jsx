@@ -153,31 +153,34 @@ function AdminDashboard({ onBack }) {
           </div>
         </div>
 
-        {/* --- ANALYTICS CARDS SECTION --- */}
+        {/* --- ANALYTICS CARDS (EXPLICIT STYLING TO OVERRIDE APP.CSS) --- */}
         <div style={{ 
           display: 'grid', 
           gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
           gap: '20px', 
-          marginBottom: '30px' 
+          marginBottom: '30px',
+          width: '100%',
+          visibility: 'visible',
+          opacity: 1
         }}>
-          <div className="order-summary" style={{ padding: '20px', textAlign: 'center', margin: 0 }}>
-            <p style={{ color: 'var(--gray)', fontSize: '0.8rem', marginBottom: '5px' }}>Total Revenue</p>
-            <h2 style={{ color: '#10b981' }}>${totalRevenue.toFixed(2)}</h2>
+          <div style={{ padding: '20px', textAlign: 'center', background: 'white', borderRadius: '12px', border: '1px solid #eee', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+            <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '5px', fontWeight: 'bold' }}>TOTAL REVENUE</p>
+            <h2 style={{ color: '#10b981', margin: 0 }}>${totalRevenue.toFixed(2)}</h2>
           </div>
 
-          <div className="order-summary" style={{ padding: '20px', textAlign: 'center', margin: 0 }}>
-            <p style={{ color: 'var(--gray)', fontSize: '0.8rem', marginBottom: '5px' }}>Inventory Value</p>
-            <h2 style={{ color: 'var(--primary)' }}>${totalInventoryValue.toFixed(2)}</h2>
+          <div style={{ padding: '20px', textAlign: 'center', background: 'white', borderRadius: '12px', border: '1px solid #eee', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+            <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '5px', fontWeight: 'bold' }}>INVENTORY VALUE</p>
+            <h2 style={{ color: 'var(--primary)', margin: 0 }}>${totalInventoryValue.toFixed(2)}</h2>
           </div>
 
-          <div className="order-summary" style={{ padding: '20px', textAlign: 'center', margin: 0 }}>
-            <p style={{ color: 'var(--gray)', fontSize: '0.8rem', marginBottom: '5px' }}>Active Orders</p>
-            <h2 style={{ color: '#f59e0b' }}>{pendingOrders}</h2>
+          <div style={{ padding: '20px', textAlign: 'center', background: 'white', borderRadius: '12px', border: '1px solid #eee', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+            <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '5px', fontWeight: 'bold' }}>ACTIVE ORDERS</p>
+            <h2 style={{ color: '#f59e0b', margin: 0 }}>{pendingOrders}</h2>
           </div>
 
-          <div className="order-summary" style={{ padding: '20px', textAlign: 'center', margin: 0 }}>
-            <p style={{ color: 'var(--gray)', fontSize: '0.8rem', marginBottom: '5px' }}>Total Items</p>
-            <h2 style={{ color: '#6366f1' }}>{products.length}</h2>
+          <div style={{ padding: '20px', textAlign: 'center', background: 'white', borderRadius: '12px', border: '1px solid #eee', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+            <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '5px', fontWeight: 'bold' }}>TOTAL ITEMS</p>
+            <h2 style={{ color: '#6366f1', margin: 0 }}>{products.length}</h2>
           </div>
         </div>
 
