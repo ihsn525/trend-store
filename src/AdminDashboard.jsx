@@ -20,7 +20,8 @@ function AdminDashboard({ onBack }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  const [newP, setNewP] = useState({ name: '', price: '', category: 'Tech', image: '', desc: '' });
+  // UPDATED: Added stock field to state
+  const [newP, setNewP] = useState({ name: '', price: '', category: 'Tech', image: '', desc: '', stock: '' });
 
   useEffect(() => {
     fetchData();
@@ -44,7 +45,7 @@ function AdminDashboard({ onBack }) {
 
   // --- BUSINESS ANALYTICS LOGIC ---
   const totalRevenue = orders.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
-  const totalInventoryValue = products.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
+  const totalInventoryValue = products.reduce((sum, p) => sum + (Number(p.price) * (Number(p.stock) || 0)), 0);
   const pendingOrders = orders.filter(o => o.status === "Processing").length;
 
   // --- SEARCH FILTER LOGIC ---
@@ -77,7 +78,8 @@ function AdminDashboard({ onBack }) {
       price: product.price,
       category: product.category,
       image: product.image,
-      desc: product.desc
+      desc: product.desc,
+      stock: product.stock // Load stock for editing
     });
     setImageSource("url"); 
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -85,7 +87,7 @@ function AdminDashboard({ onBack }) {
 
   const handleCancelEdit = () => {
     setEditingId(null);
-    setNewP({ name: '', price: '', category: 'Tech', image: '', desc: '' });
+    setNewP({ name: '', price: '', category: 'Tech', image: '', desc: '', stock: '' });
   };
 
   const handleSubmitProduct = async (e) => {
@@ -99,19 +101,21 @@ function AdminDashboard({ onBack }) {
     }
 
     try {
+      // PREPARE DATA
+      const productData = {
+        ...newP,
+        image: finalImageUrl,
+        price: Number(newP.price),
+        stock: Number(newP.stock) // Ensure stock is a number
+      };
+
       if (editingId) {
         const productRef = doc(db, "products", editingId);
-        await updateDoc(productRef, {
-          ...newP,
-          image: finalImageUrl,
-          price: Number(newP.price)
-        });
+        await updateDoc(productRef, productData);
         alert("Product updated successfully!");
       } else {
         await addDoc(collection(db, "products"), {
-          ...newP,
-          image: finalImageUrl,
-          price: Number(newP.price),
+          ...productData,
           createdAt: new Date()
         });
         alert("Product added successfully!");
@@ -153,31 +157,20 @@ function AdminDashboard({ onBack }) {
           </div>
         </div>
 
-        {/* --- ANALYTICS CARDS (EXPLICIT STYLING TO OVERRIDE APP.CSS) --- */}
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-          gap: '20px', 
-          marginBottom: '30px',
-          width: '100%',
-          visibility: 'visible',
-          opacity: 1
-        }}>
+        {/* --- ANALYTICS CARDS --- */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' }}>
           <div style={{ padding: '20px', textAlign: 'center', background: 'white', borderRadius: '12px', border: '1px solid #eee', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
             <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '5px', fontWeight: 'bold' }}>TOTAL REVENUE</p>
             <h2 style={{ color: '#10b981', margin: 0 }}>${totalRevenue.toFixed(2)}</h2>
           </div>
-
           <div style={{ padding: '20px', textAlign: 'center', background: 'white', borderRadius: '12px', border: '1px solid #eee', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
             <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '5px', fontWeight: 'bold' }}>INVENTORY VALUE</p>
             <h2 style={{ color: 'var(--primary)', margin: 0 }}>${totalInventoryValue.toFixed(2)}</h2>
           </div>
-
           <div style={{ padding: '20px', textAlign: 'center', background: 'white', borderRadius: '12px', border: '1px solid #eee', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
             <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '5px', fontWeight: 'bold' }}>ACTIVE ORDERS</p>
             <h2 style={{ color: '#f59e0b', margin: 0 }}>{pendingOrders}</h2>
           </div>
-
           <div style={{ padding: '20px', textAlign: 'center', background: 'white', borderRadius: '12px', border: '1px solid #eee', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
             <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '5px', fontWeight: 'bold' }}>TOTAL ITEMS</p>
             <h2 style={{ color: '#6366f1', margin: 0 }}>{products.length}</h2>
@@ -216,35 +209,25 @@ function AdminDashboard({ onBack }) {
         ) : (
           <div className="inventory-section">
             {/* PRODUCT FORM */}
-            <form 
-              onSubmit={handleSubmitProduct} 
-              className={`order-summary ${editingId ? 'editing-mode' : ''}`} 
-              style={{ marginBottom: '40px', textAlign: 'left' }}
-            >
-              <h3>
-                {editingId ? "Editing Product" : "Add New Product"}
-                {editingId && <span className="edit-badge">Mode: Active</span>}
-              </h3>
+            <form onSubmit={handleSubmitProduct} className={`order-summary ${editingId ? 'editing-mode' : ''}`} style={{ marginBottom: '40px', textAlign: 'left' }}>
+              <h3>{editingId ? "Editing Product" : "Add New Product"}</h3>
               <div className="form-grid">
                 <input className="premium-input" placeholder="Product Name" value={newP.name} onChange={e => setNewP({...newP, name: e.target.value})} required />
-                <div className="form-row">
-                  <input className="premium-input" placeholder="Price" type="number" value={newP.price} onChange={e => setNewP({...newP, price: e.target.value})} required />
-                  <select className="premium-input" value={newP.category} onChange={e => setNewP({...newP, category: e.target.value})}>
-                    <option value="Tech">Tech</option>
-                    <option value="Shoes">Shoes</option>
-                    <option value="Apparel">Apparel</option>
-                    <option value="Accessories">Accessories</option>
+                <div className="form-row" style={{ display: 'flex', gap: '10px' }}>
+                  <input className="premium-input" style={{ flex: 1 }} placeholder="Price" type="number" value={newP.price} onChange={e => setNewP({...newP, price: e.target.value})} required />
+                  
+                  {/* NEW: Stock Input */}
+                  <input className="premium-input" style={{ flex: 1 }} placeholder="Stock Quantity" type="number" value={newP.stock} onChange={e => setNewP({...newP, stock: e.target.value})} required />
+                  
+                  <select className="premium-input" style={{ flex: 1 }} value={newP.category} onChange={e => setNewP({...newP, category: e.target.value})}>
+                    <option value="Tech">Tech</option><option value="Shoes">Shoes</option><option value="Apparel">Apparel</option><option value="Accessories">Accessories</option>
                   </select>
                 </div>
 
                 <div style={{ marginBottom: '10px', fontSize: '0.8rem', color: 'var(--gray)' }}>
                   Image Source: 
-                  <label style={{ marginLeft: '15px' }}>
-                    <input type="radio" checked={imageSource === 'url'} onChange={() => setImageSource('url')} /> URL
-                  </label>
-                  <label style={{ marginLeft: '15px' }}>
-                    <input type="radio" checked={imageSource === 'upload'} onChange={() => setImageSource('upload')} /> Upload File
-                  </label>
+                  <label style={{ marginLeft: '15px' }}><input type="radio" checked={imageSource === 'url'} onChange={() => setImageSource('url')} /> URL</label>
+                  <label style={{ marginLeft: '15px' }}><input type="radio" checked={imageSource === 'upload'} onChange={() => setImageSource('upload')} /> Upload File</label>
                 </div>
 
                 {imageSource === 'url' ? (
@@ -260,9 +243,7 @@ function AdminDashboard({ onBack }) {
                     {isUploading ? "Uploading..." : (editingId ? "Update Product" : "List Product")}
                     </button>
                     {editingId && (
-                        <button type="button" className="checkout-btn-main" onClick={handleCancelEdit} style={{ flex: 1, background: '#666' }}>
-                            Cancel
-                        </button>
+                        <button type="button" className="checkout-btn-main" onClick={handleCancelEdit} style={{ flex: 1, background: '#666' }}>Cancel</button>
                     )}
                 </div>
               </div>
@@ -272,39 +253,29 @@ function AdminDashboard({ onBack }) {
 
             {/* SEARCH BAR */}
             <div style={{ marginBottom: '20px' }}>
-                <input 
-                    type="text" 
-                    className="premium-input" 
-                    placeholder="Search by name or category..." 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    style={{ maxWidth: '100%', border: '1px solid var(--primary)' }}
-                />
+                <input type="text" className="premium-input" placeholder="Search by name or category..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ maxWidth: '100%', border: '1px solid var(--primary)' }} />
             </div>
 
             {/* INVENTORY LIST */}
             <div className="order-list">
-              {filteredProducts.length > 0 ? (
-                filteredProducts.map(p => (
-                    <div key={p.id} className="order-item-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                        <img src={p.image} alt="" style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
-                        <div>
-                          <p style={{ fontWeight: 700 }}>{p.name}</p>
-                          <p style={{ fontSize: '0.8rem', color: 'var(--gray)' }}>{p.category} — ${p.price}</p>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <button onClick={() => startEdit(p)} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 700, cursor: 'pointer' }}>Edit</button>
-                        <button onClick={() => handleDeleteProduct(p.id)} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: 700, cursor: 'pointer' }}>Remove</button>
-                      </div>
+              {filteredProducts.map(p => (
+                <div key={p.id} className="order-item-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                    <img src={p.image} alt="" style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
+                    <div>
+                      <p style={{ fontWeight: 700 }}>{p.name}</p>
+                      {/* Show current stock level here */}
+                      <p style={{ fontSize: '0.8rem', color: Number(p.stock) < 5 ? '#ef4444' : 'var(--gray)' }}>
+                        {p.category} — ${p.price} — <span style={{fontWeight: 'bold'}}>{p.stock} in stock</span>
+                      </p>
                     </div>
-                  ))
-              ) : (
-                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--gray)' }}>
-                    No products found matching "{searchTerm}"
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button onClick={() => startEdit(p)} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 700, cursor: 'pointer' }}>Edit</button>
+                    <button onClick={() => handleDeleteProduct(p.id)} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: 700, cursor: 'pointer' }}>Remove</button>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           </div>
         )}

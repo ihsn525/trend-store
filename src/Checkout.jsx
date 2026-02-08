@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from './firebase';
-import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { 
+  doc, 
+  getDoc, 
+  collection, 
+  addDoc, 
+  serverTimestamp, 
+  runTransaction 
+} from 'firebase/firestore';
 
 function Checkout({ cart, total, onBack, onOrderSuccess }) {
   const [step, setStep] = useState(1);
@@ -42,32 +49,72 @@ function Checkout({ cart, total, onBack, onOrderSuccess }) {
     fetchSavedAddress();
   }, [user]);
 
-  // 2. Handle Order Submission
+  // 2. Handle Order Submission with Atomic Stock Reduction
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
+    if (cart.length === 0) return;
     setProcessing(true);
 
     try {
-      // Create Order Object
-      const orderData = {
-        userId: user.uid,
-        customerName: user.displayName || user.email,
-        items: cart,
-        totalAmount: total,
-        shippingDetails: formData,
-        status: 'Processing',
-        createdAt: serverTimestamp()
-      };
+      // Use a Transaction to ensure stock is updated safely
+      await runTransaction(db, async (transaction) => {
+        const productRefs = cart.map(item => ({
+          ref: doc(db, "products", item.id),
+          qtyToBuy: item.qty,
+          name: item.name
+        }));
 
-      // Save to Firestore 'orders' collection
-      const docRef = await addDoc(collection(db, "orders"), orderData);
-      
-      // Trigger success (this will clear cart in App.jsx)
-      onOrderSuccess({ id: docRef.id, ...orderData });
-      
+        // Read all product docs first
+        const productSnapshots = await Promise.all(
+          productRefs.map(p => transaction.get(p.ref))
+        );
+
+        // Check for stock availability
+        productSnapshots.forEach((snap, index) => {
+          if (!snap.exists()) throw new Error(`Product ${productRefs[index].name} does not exist!`);
+          
+          const currentStock = snap.data().stock || 0;
+          const requestedQty = productRefs[index].qtyToBuy;
+
+          if (currentStock < requestedQty) {
+            throw new Error(`Insufficient stock for ${productRefs[index].name}. Only ${currentStock} left.`);
+          }
+        });
+
+        // If we reach here, all items are in stock. Now subtract.
+        productSnapshots.forEach((snap, index) => {
+          const newStock = snap.data().stock - productRefs[index].qtyToBuy;
+          transaction.update(productRefs[index].ref, { stock: newStock });
+        });
+
+        // Create Order Object
+        const orderData = {
+          userId: user.uid,
+          customerName: user.displayName || user.email,
+          items: cart.map(item => ({
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            qty: item.qty
+          })),
+          totalAmount: total,
+          shippingDetails: formData,
+          status: 'Processing',
+          createdAt: serverTimestamp()
+        };
+
+        // Add the order to the orders collection
+        const ordersRef = collection(db, "orders");
+        const newOrderRef = doc(ordersRef); // Create ref with auto ID
+        transaction.set(newOrderRef, orderData);
+        
+        // Pass data back to parent for UI cleanup
+        onOrderSuccess({ id: newOrderRef.id, ...orderData });
+      });
+
     } catch (err) {
-      console.error("Order Error:", err);
-      alert("Something went wrong with your order.");
+      console.error("Checkout Failed:", err);
+      alert(err.message || "Something went wrong with your order.");
     } finally {
       setProcessing(false);
     }
@@ -90,7 +137,7 @@ function Checkout({ cart, total, onBack, onOrderSuccess }) {
           {/* LEFT SIDE: FORMS */}
           <div className="form-section">
             {step === 1 ? (
-              <form onSubmit={() => setStep(2)} className="form-grid">
+              <form onSubmit={(e) => { e.preventDefault(); setStep(2); }} className="form-grid">
                 <h2>Shipping Details</h2>
                 <p style={{marginBottom: '20px', color: 'var(--gray)'}}>Confirm where we should send your order.</p>
                 
@@ -141,7 +188,9 @@ function Checkout({ cart, total, onBack, onOrderSuccess }) {
                 >
                   {processing ? "Processing..." : `Pay $${total.toFixed(2)}`}
                 </button>
-                <button className="back-to-step" onClick={() => setStep(1)}>Edit Shipping</button>
+                <button className="back-to-step" onClick={() => setStep(1)} style={{marginTop: '15px', background: 'none', border: 'none', color: 'var(--gray)', cursor: 'pointer', textDecoration: 'underline'}}>
+                    Edit Shipping
+                </button>
               </div>
             )}
           </div>

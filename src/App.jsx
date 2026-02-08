@@ -12,7 +12,7 @@ function App() {
   const [user, setUser] = useState(null); 
   const [view, setView] = useState("shop");
   const [products, setProducts] = useState([]); 
-  const [sortBy, setSortBy] = useState("newest"); // NEW: Sort state
+  const [sortBy, setSortBy] = useState("newest");
   const [cart, setCart] = useState(() => {
     try {
       const saved = localStorage.getItem("trendstore_cart");
@@ -67,7 +67,6 @@ function App() {
     localStorage.setItem("trendstore_cart", JSON.stringify(cart));
   }, [cart]);
 
-  // --- REFINED FILTER & SORT LOGIC ---
   const filteredAndSorted = products
     .filter(p => 
       p.name.toLowerCase().includes(search.toLowerCase()) && 
@@ -82,16 +81,29 @@ function App() {
 
   const handleAddToCart = (product) => {
     const existing = cart.find(item => item.id === product.id);
-    if (existing) {
-      setCart(cart.map(item => item.id === product.id ? { ...item, qty: (Number(item.qty) || 1) + 1 } : item));
+    const currentQtyInCart = existing ? existing.qty : 0;
+    const availableStock = Number(product.stock) || 0;
+
+    if (currentQtyInCart < availableStock) {
+      if (existing) {
+        setCart(cart.map(item => item.id === product.id ? { ...item, qty: item.qty + 1 } : item));
+      } else {
+        setCart([...cart, { ...product, qty: 1 }]);
+      }
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 2000);
     } else {
-      setCart([...cart, { ...product, qty: 1 }]);
+      alert(availableStock === 0 ? "Out of Stock" : `Sorry, only ${availableStock} items available.`);
     }
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 2000);
   };
 
   const updateQty = (id, delta) => {
+    const product = products.find(p => p.id === id);
+    const itemInCart = cart.find(item => item.id === id);
+    if (delta > 0 && itemInCart.qty >= (product.stock || 0)) {
+        alert("Cannot exceed available stock.");
+        return;
+    }
     setCart(cart.map(item => 
       item.id === id ? { ...item, qty: Math.max(1, (Number(item.qty) || 1) + delta) } : item
     ));
@@ -110,7 +122,6 @@ function App() {
 
   const handleLogout = () => signOut(auth).then(() => setView("shop"));
 
-  // --- VIEW CONDITIONALS ---
   if (view === "auth") return <Auth onAuthSuccess={() => setView("shop")} onBack={() => setView("shop")} />;
   if (view === "profile") return <Profile onBack={() => setView("shop")} />;
   if (view === "admin") {
@@ -126,8 +137,71 @@ function App() {
     <div className="app-container">
       {showToast && <div className="toast">Added to bag! 🛍️</div>}
 
-      {/* Product Detail Modal and Cart Sidebar remain as per your original code */}
-      {/* ... (Keep your modal and cart sidebar code here) ... */}
+      {/* Product Detail Modal */}
+      {selectedProduct && (
+        <div className="modal-overlay" onClick={() => setSelectedProduct(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <button className="close-modal-premium" onClick={() => setSelectedProduct(null)}>✕</button>
+            <img src={selectedProduct.image} className="modal-image" alt={selectedProduct.name} />
+            <div className="modal-details">
+              <p className="card-category">{selectedProduct.category}</p>
+              <h2>{selectedProduct.name}</h2>
+              <p className="modal-desc">{selectedProduct.desc}</p>
+              <div className="modal-footer">
+                <span className="modal-price">${Number(selectedProduct.price).toFixed(2)}</span>
+                <button 
+                  className="add-btn-premium" 
+                  disabled={Number(selectedProduct.stock) <= 0}
+                  onClick={() => { handleAddToCart(selectedProduct); setSelectedProduct(null); }}
+                >
+                  {Number(selectedProduct.stock) <= 0 ? "Out of Stock" : "Add to Bag"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cart Sidebar */}
+      {isCartOpen && (
+        <div className="cart-overlay" onClick={() => setIsCartOpen(false)}>
+          <div className="cart-sidebar" onClick={e => e.stopPropagation()}>
+            <div className="cart-header">
+              <h2>Your Bag ({totalItems})</h2>
+              <button className="close-btn" onClick={() => setIsCartOpen(false)}>✕</button>
+            </div>
+            <div className="cart-items-list">
+              {cart.length === 0 ? (
+                <div className="empty-state">Your bag is empty.</div>
+              ) : (
+                cart.map(item => (
+                  <div key={item.id} className="cart-item">
+                    <img src={item.image} className="cart-item-img" alt={item.name} />
+                    <div className="cart-item-info">
+                      <p className="item-name">{item.name}</p>
+                      <div className="qty-controls">
+                        <button onClick={() => updateQty(item.id, -1)}>-</button>
+                        <span>{item.qty}</span>
+                        <button onClick={() => updateQty(item.id, 1)}>+</button>
+                      </div>
+                    </div>
+                    <div className="cart-item-right">
+                      <p className="item-price">${(item.price * item.qty).toFixed(2)}</p>
+                      <button className="remove-link" onClick={() => removeFromCart(item.id)}>Remove</button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="cart-footer">
+              <div className="total-row"><span>Total</span><span>${cartTotal.toFixed(2)}</span></div>
+              <button className="checkout-btn" disabled={cart.length === 0} onClick={() => { setIsCartOpen(false); setView("checkout"); }}>
+                Proceed to Checkout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <nav className="navbar">
         <div className="nav-content">
@@ -154,43 +228,14 @@ function App() {
         <p>Premium essentials designed for your everyday lifestyle.</p>
       </header>
 
-      {/* --- IMPROVED CONTROLS SECTION --- */}
-      <section className="controls-section" style={{ 
-        maxWidth: '1000px', 
-        margin: '0 auto 40px', 
-        background: '#fff', 
-        padding: '24px', 
-        borderRadius: '24px', 
-        boxShadow: '0 10px 25px rgba(0,0,0,0.03)' 
-      }}>
+      <section className="controls-section" style={{ maxWidth: '1000px', margin: '0 auto 40px', background: '#fff', padding: '24px', borderRadius: '24px', boxShadow: '0 10px 25px rgba(0,0,0,0.03)' }}>
         <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
           <div style={{ position: 'relative', flex: 1 }}>
             <span style={{ position: 'absolute', left: '18px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }}>🔍</span>
-            <input 
-              className="search-bar" 
-              style={{ width: '100%', paddingLeft: '45px', margin: 0, border: '1px solid #eee' }}
-              placeholder="Search by product name..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            <input className="search-bar" style={{ width: '100%', paddingLeft: '45px', margin: 0, border: '1px solid #eee' }} placeholder="Search by product name..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
-          
           <div style={{ position: 'relative' }}>
-            <select 
-              className="sort-dropdown"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              style={{
-                padding: '14px 40px 14px 20px',
-                borderRadius: '14px',
-                border: '1px solid #eee',
-                background: '#fff',
-                fontSize: '0.9rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                appearance: 'none'
-              }}
-            >
+            <select className="sort-dropdown" value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ padding: '14px 40px 14px 20px', borderRadius: '14px', border: '1px solid #eee', background: '#fff', fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer', appearance: 'none' }}>
               <option value="newest">Newest First</option>
               <option value="low">Price: Low to High</option>
               <option value="high">Price: High to Low</option>
@@ -201,13 +246,7 @@ function App() {
 
         <div className="filter-group" style={{ justifyContent: 'center', borderTop: '1px solid #f5f5f5', paddingTop: '20px' }}>
           {["All", "Tech", "Shoes", "Apparel", "Accessories"].map(cat => (
-            <button 
-              key={cat}
-              className={`filter-chip ${activeTab === cat ? 'active' : ''}`}
-              onClick={() => setActiveTab(cat)}
-            >
-              {cat}
-            </button>
+            <button key={cat} className={`filter-chip ${activeTab === cat ? 'active' : ''}`} onClick={() => setActiveTab(cat)}>{cat}</button>
           ))}
         </div>
       </section>
@@ -216,28 +255,42 @@ function App() {
         {loading ? (
           <div className="loader">Refreshing Collection...</div>
         ) : filteredAndSorted.length > 0 ? (
-          filteredAndSorted.map(p => (
-            <div key={p.id} className="product-card" onClick={() => setSelectedProduct(p)}>
-              <div className="image-wrapper">
-                <img src={p.image} alt={p.name} className="product-image" />
+          filteredAndSorted.map(p => {
+            // STOCK BADGE LOGIC
+            const stockVal = Number(p.stock) || 0;
+            let statusLabel = "IN STOCK";
+            let statusColor = "#22c55e";
+            if (stockVal === 0) { statusLabel = "OUT OF STOCK"; statusColor = "#ef4444"; }
+            else if (stockVal < 5) { statusLabel = `ONLY ${stockVal} LEFT`; statusColor = "#f59e0b"; }
+
+            return (
+              <div key={p.id} className="product-card" onClick={() => setSelectedProduct(p)}>
+                <div className="image-wrapper" style={{ position: 'relative' }}>
+                  <img src={p.image} alt={p.name} className="product-image" />
+                  <div style={{ position: 'absolute', top: '10px', left: '10px', backgroundColor: statusColor, color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '0.65rem', fontWeight: 'bold' }}>
+                    {statusLabel}
+                  </div>
+                </div>
+                <div className="card-details">
+                  <p className="card-category">{p.category}</p>
+                  <h3 className="card-title">{p.name}</h3>
+                  <p className="price-tag">${Number(p.price).toFixed(2)}</p>
+                </div>
+                <button 
+                  className="add-btn" 
+                  disabled={stockVal === 0}
+                  onClick={(e) => { e.stopPropagation(); handleAddToCart(p); }}
+                  style={{ opacity: stockVal === 0 ? 0.6 : 1 }}
+                >
+                  {stockVal === 0 ? "Unavailable" : "Add to Bag"}
+                </button>
               </div>
-              <div className="card-details">
-                <p className="card-category">{p.category}</p>
-                <h3 className="card-title">{p.name}</h3>
-                <p className="price-tag">${Number(p.price).toFixed(2)}</p>
-              </div>
-              <button className="add-btn" onClick={(e) => { e.stopPropagation(); handleAddToCart(p); }}>Add to Bag</button>
-            </div>
-          ))
+            );
+          })
         ) : (
           <div className="no-results" style={{ gridColumn: '1/-1', textAlign: 'center', padding: '50px' }}>
             <p style={{ color: '#999', fontSize: '1.2rem' }}>No products found matching your criteria.</p>
-            <button 
-                onClick={() => {setSearch(""); setActiveTab("All")}} 
-                style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline', marginTop: '10px' }}
-            >
-                Clear all filters
-            </button>
+            <button onClick={() => {setSearch(""); setActiveTab("All")}} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline', marginTop: '10px' }}>Clear all filters</button>
           </div>
         )}
       </main>
