@@ -53,7 +53,7 @@ function App() {
       }
     };
     fetchProducts();
-  }, []);
+  }, [view]); // Refetch when view changes (e.g., coming back from Admin or Checkout)
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -79,6 +79,7 @@ function App() {
       return 0;
     });
 
+  // UPDATED: Logic to prevent adding more than available stock
   const handleAddToCart = (product) => {
     const existing = cart.find(item => item.id === product.id);
     const currentQtyInCart = existing ? existing.qty : 0;
@@ -97,13 +98,16 @@ function App() {
     }
   };
 
+  // UPDATED: Logic to prevent incrementing beyond stock in sidebar
   const updateQty = (id, delta) => {
     const product = products.find(p => p.id === id);
     const itemInCart = cart.find(item => item.id === id);
-    if (delta > 0 && itemInCart.qty >= (product.stock || 0)) {
+    
+    if (delta > 0 && itemInCart.qty >= (Number(product.stock) || 0)) {
         alert("Cannot exceed available stock.");
         return;
     }
+    
     setCart(cart.map(item => 
       item.id === id ? { ...item, qty: Math.max(1, (Number(item.qty) || 1) + delta) } : item
     ));
@@ -256,18 +260,24 @@ function App() {
           <div className="loader">Refreshing Collection...</div>
         ) : filteredAndSorted.length > 0 ? (
           filteredAndSorted.map(p => {
-            // STOCK BADGE LOGIC
+            // UPDATED: MODERN STOCK BADGE LOGIC
             const stockVal = Number(p.stock) || 0;
-            let statusLabel = "IN STOCK";
-            let statusColor = "#22c55e";
-            if (stockVal === 0) { statusLabel = "OUT OF STOCK"; statusColor = "#ef4444"; }
-            else if (stockVal < 5) { statusLabel = `ONLY ${stockVal} LEFT`; statusColor = "#f59e0b"; }
+            let statusClass = "status-high";
+            let statusLabel = "In Stock";
+
+            if (stockVal === 0) {
+              statusClass = "status-out";
+              statusLabel = "Sold Out";
+            } else if (stockVal < 5) {
+              statusClass = "status-low";
+              statusLabel = `Only ${stockVal} left`;
+            }
 
             return (
-              <div key={p.id} className="product-card" onClick={() => setSelectedProduct(p)}>
-                <div className="image-wrapper" style={{ position: 'relative' }}>
+              <div key={p.id} className={`product-card ${stockVal === 0 ? 'out-of-stock' : ''}`} onClick={() => setSelectedProduct(p)}>
+                <div className="image-wrapper">
                   <img src={p.image} alt={p.name} className="product-image" />
-                  <div style={{ position: 'absolute', top: '10px', left: '10px', backgroundColor: statusColor, color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '0.65rem', fontWeight: 'bold' }}>
+                  <div className={`stock-badge ${statusClass}`}>
                     {statusLabel}
                   </div>
                 </div>
