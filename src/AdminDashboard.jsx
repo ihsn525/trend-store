@@ -174,8 +174,15 @@ function AdminDashboard({ onBack }) {
            </table>
         ) : (
           <div className="inventory-section">
-            <form onSubmit={handleSubmitProduct} className="order-summary" style={{ marginBottom: '40px', textAlign: 'left' }}>
-              <h3>{editingId ? "Edit Product" : "Add New Product"}</h3>
+            <form 
+              onSubmit={handleSubmitProduct} 
+              className={`order-summary ${editingId ? 'editing-mode' : ''}`} 
+              style={{ marginBottom: '40px', textAlign: 'left' }}
+            >
+              <h3>
+                {editingId ? "Editing Product" : "Add New Product"}
+                {editingId && <span className="edit-badge">Mode: Active</span>}
+              </h3>
               <div className="form-grid">
                 <input className="premium-input" placeholder="Product Name" value={newP.name} onChange={e => setNewP({...newP, name: e.target.value})} required />
                 <div className="form-row">
