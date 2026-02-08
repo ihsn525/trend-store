@@ -9,7 +9,7 @@ function AdminDashboard({ onBack }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("orders");
 
-  // --- NEW SEARCH STATE ---
+  // State for Search
   const [searchTerm, setSearchTerm] = useState("");
 
   // State for Editing
@@ -42,8 +42,12 @@ function AdminDashboard({ onBack }) {
     }
   };
 
-  // --- FILTER LOGIC ---
-  // This derived state handles searching by name OR category automatically
+  // --- BUSINESS ANALYTICS LOGIC ---
+  const totalRevenue = orders.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
+  const totalInventoryValue = products.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
+  const pendingOrders = orders.filter(o => o.status === "Processing").length;
+
+  // --- SEARCH FILTER LOGIC ---
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.category.toLowerCase().includes(searchTerm.toLowerCase())
@@ -146,6 +150,34 @@ function AdminDashboard({ onBack }) {
           <div className="filter-group" style={{ margin: 0 }}>
             <button className={`filter-chip ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>Orders</button>
             <button className={`filter-chip ${activeTab === 'inventory' ? 'active' : ''}`} onClick={() => setActiveTab('inventory')}>Inventory</button>
+          </div>
+        </div>
+
+        {/* --- ANALYTICS CARDS SECTION --- */}
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+          gap: '20px', 
+          marginBottom: '30px' 
+        }}>
+          <div className="order-summary" style={{ padding: '20px', textAlign: 'center', margin: 0 }}>
+            <p style={{ color: 'var(--gray)', fontSize: '0.8rem', marginBottom: '5px' }}>Total Revenue</p>
+            <h2 style={{ color: '#10b981' }}>${totalRevenue.toFixed(2)}</h2>
+          </div>
+
+          <div className="order-summary" style={{ padding: '20px', textAlign: 'center', margin: 0 }}>
+            <p style={{ color: 'var(--gray)', fontSize: '0.8rem', marginBottom: '5px' }}>Inventory Value</p>
+            <h2 style={{ color: 'var(--primary)' }}>${totalInventoryValue.toFixed(2)}</h2>
+          </div>
+
+          <div className="order-summary" style={{ padding: '20px', textAlign: 'center', margin: 0 }}>
+            <p style={{ color: 'var(--gray)', fontSize: '0.8rem', marginBottom: '5px' }}>Active Orders</p>
+            <h2 style={{ color: '#f59e0b' }}>{pendingOrders}</h2>
+          </div>
+
+          <div className="order-summary" style={{ padding: '20px', textAlign: 'center', margin: 0 }}>
+            <p style={{ color: 'var(--gray)', fontSize: '0.8rem', marginBottom: '5px' }}>Total Items</p>
+            <h2 style={{ color: '#6366f1' }}>{products.length}</h2>
           </div>
         </div>
 
