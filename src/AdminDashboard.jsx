@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { db, storage } from './firebase'; // Ensure storage is exported from firebase.js
+import { db, storage } from './firebase'; 
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, orderBy, query } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'; // Added Storage imports
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 function AdminDashboard({ onBack }) {
   const [orders, setOrders] = useState([]);
@@ -9,8 +9,11 @@ function AdminDashboard({ onBack }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("orders");
 
-  // New State for Image Source Choice
-  const [imageSource, setImageSource] = useState("url"); // "url" or "upload"
+  // State for Editing
+  const [editingId, setEditingId] = useState(null); 
+
+  // State for Image Source Choice
+  const [imageSource, setImageSource] = useState("url"); 
   const [selectedFile, setSelectedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -36,7 +39,6 @@ function AdminDashboard({ onBack }) {
     }
   };
 
-  // Logic to handle the file upload to Firebase Storage
   const uploadImage = async () => {
     if (!selectedFile) return null;
     try {
@@ -54,33 +56,62 @@ function AdminDashboard({ onBack }) {
     }
   };
 
-  const handleAddProduct = async (e) => {
+  // Pre-fill the form with existing data to start editing
+  const startEdit = (product) => {
+    setEditingId(product.id);
+    setNewP({
+      name: product.name,
+      price: product.price,
+      category: product.category,
+      image: product.image,
+      desc: product.desc
+    });
+    setImageSource("url"); // Default back to URL mode for editing
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setNewP({ name: '', price: '', category: 'Tech', image: '', desc: '' });
+  };
+
+  const handleSubmitProduct = async (e) => {
     e.preventDefault();
     let finalImageUrl = newP.image;
 
-    // If user chose to upload a file, do that first
-    if (imageSource === "upload") {
+    if (imageSource === "upload" && selectedFile) {
       const uploadedUrl = await uploadImage();
-      if (!uploadedUrl) return; // Stop if upload failed
+      if (!uploadedUrl) return; 
       finalImageUrl = uploadedUrl;
     }
 
     try {
-      const docRef = await addDoc(collection(db, "products"), {
-        ...newP,
-        image: finalImageUrl,
-        price: Number(newP.price),
-        createdAt: new Date()
-      });
+      if (editingId) {
+        // UPDATE EXISTING
+        const productRef = doc(db, "products", editingId);
+        await updateDoc(productRef, {
+          ...newP,
+          image: finalImageUrl,
+          price: Number(newP.price)
+        });
+        alert("Product updated successfully!");
+      } else {
+        // ADD NEW
+        await addDoc(collection(db, "products"), {
+          ...newP,
+          image: finalImageUrl,
+          price: Number(newP.price),
+          createdAt: new Date()
+        });
+        alert("Product added successfully!");
+      }
       
-      setProducts([...products, { id: docRef.id, ...newP, image: finalImageUrl, price: Number(newP.price) }]);
-      
-      // Reset Form
-      setNewP({ name: '', price: '', category: 'Tech', image: '', desc: '' });
-      setSelectedFile(null);
-      alert("Product added successfully!");
+      // Reset after success
+      handleCancelEdit();
+      fetchData(); // Refresh list
     } catch (err) { 
-      alert("Error adding product to database"); 
+      console.error(err);
+      alert("Error saving product"); 
     }
   };
 
@@ -143,8 +174,8 @@ function AdminDashboard({ onBack }) {
            </table>
         ) : (
           <div className="inventory-section">
-            <form onSubmit={handleAddProduct} className="order-summary" style={{ marginBottom: '40px', textAlign: 'left' }}>
-              <h3>Add New Product</h3>
+            <form onSubmit={handleSubmitProduct} className="order-summary" style={{ marginBottom: '40px', textAlign: 'left' }}>
+              <h3>{editingId ? "Edit Product" : "Add New Product"}</h3>
               <div className="form-grid">
                 <input className="premium-input" placeholder="Product Name" value={newP.name} onChange={e => setNewP({...newP, name: e.target.value})} required />
                 <div className="form-row">
@@ -157,7 +188,6 @@ function AdminDashboard({ onBack }) {
                   </select>
                 </div>
 
-                {/* IMAGE SOURCE TOGGLE */}
                 <div style={{ marginBottom: '10px', fontSize: '0.8rem', color: 'var(--gray)' }}>
                   Image Source: 
                   <label style={{ marginLeft: '15px' }}>
@@ -169,16 +199,23 @@ function AdminDashboard({ onBack }) {
                 </div>
 
                 {imageSource === 'url' ? (
-                  <input className="premium-input" placeholder="Image URL (https://...)" value={newP.image} onChange={e => setNewP({...newP, image: e.target.value})} required />
+                  <input className="premium-input" placeholder="Image URL" value={newP.image} onChange={e => setNewP({...newP, image: e.target.value})} required={!editingId} />
                 ) : (
-                  <input className="premium-input" type="file" accept="image/*" onChange={e => setSelectedFile(e.target.files[0])} required />
+                  <input className="premium-input" type="file" accept="image/*" onChange={e => setSelectedFile(e.target.files[0])} required={!editingId} />
                 )}
 
                 <textarea className="premium-input" style={{ height: '80px' }} placeholder="Description" value={newP.desc} onChange={e => setNewP({...newP, desc: e.target.value})} required />
                 
-                <button type="submit" className="checkout-btn-main" disabled={isUploading}>
-                  {isUploading ? "Uploading Image..." : "List Product"}
-                </button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <button type="submit" className="checkout-btn-main" disabled={isUploading} style={{ flex: 2 }}>
+                    {isUploading ? "Uploading..." : (editingId ? "Update Product" : "List Product")}
+                    </button>
+                    {editingId && (
+                        <button type="button" className="checkout-btn-main" onClick={handleCancelEdit} style={{ flex: 1, background: '#666' }}>
+                            Cancel
+                        </button>
+                    )}
+                </div>
               </div>
             </form>
 
@@ -192,7 +229,10 @@ function AdminDashboard({ onBack }) {
                       <p style={{ fontSize: '0.8rem', color: 'var(--gray)' }}>{p.category} — ${p.price}</p>
                     </div>
                   </div>
-                  <button onClick={() => handleDeleteProduct(p.id)} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: 700, cursor: 'pointer' }}>Remove</button>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button onClick={() => startEdit(p)} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 700, cursor: 'pointer' }}>Edit</button>
+                    <button onClick={() => handleDeleteProduct(p.id)} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: 700, cursor: 'pointer' }}>Remove</button>
+                  </div>
                 </div>
               ))}
             </div>
