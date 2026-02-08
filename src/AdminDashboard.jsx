@@ -9,6 +9,9 @@ function AdminDashboard({ onBack }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("orders");
 
+  // --- NEW SEARCH STATE ---
+  const [searchTerm, setSearchTerm] = useState("");
+
   // State for Editing
   const [editingId, setEditingId] = useState(null); 
 
@@ -39,6 +42,13 @@ function AdminDashboard({ onBack }) {
     }
   };
 
+  // --- FILTER LOGIC ---
+  // This derived state handles searching by name OR category automatically
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    p.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   const uploadImage = async () => {
     if (!selectedFile) return null;
     try {
@@ -56,7 +66,6 @@ function AdminDashboard({ onBack }) {
     }
   };
 
-  // Pre-fill the form with existing data to start editing
   const startEdit = (product) => {
     setEditingId(product.id);
     setNewP({
@@ -66,7 +75,7 @@ function AdminDashboard({ onBack }) {
       image: product.image,
       desc: product.desc
     });
-    setImageSource("url"); // Default back to URL mode for editing
+    setImageSource("url"); 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -87,7 +96,6 @@ function AdminDashboard({ onBack }) {
 
     try {
       if (editingId) {
-        // UPDATE EXISTING
         const productRef = doc(db, "products", editingId);
         await updateDoc(productRef, {
           ...newP,
@@ -96,7 +104,6 @@ function AdminDashboard({ onBack }) {
         });
         alert("Product updated successfully!");
       } else {
-        // ADD NEW
         await addDoc(collection(db, "products"), {
           ...newP,
           image: finalImageUrl,
@@ -106,9 +113,8 @@ function AdminDashboard({ onBack }) {
         alert("Product added successfully!");
       }
       
-      // Reset after success
       handleCancelEdit();
-      fetchData(); // Refresh list
+      fetchData(); 
     } catch (err) { 
       console.error(err);
       alert("Error saving product"); 
@@ -174,6 +180,7 @@ function AdminDashboard({ onBack }) {
            </table>
         ) : (
           <div className="inventory-section">
+            {/* PRODUCT FORM */}
             <form 
               onSubmit={handleSubmitProduct} 
               className={`order-summary ${editingId ? 'editing-mode' : ''}`} 
@@ -226,22 +233,43 @@ function AdminDashboard({ onBack }) {
               </div>
             </form>
 
+            <hr style={{ border: '1px solid #eee', marginBottom: '30px' }} />
+
+            {/* SEARCH BAR */}
+            <div style={{ marginBottom: '20px' }}>
+                <input 
+                    type="text" 
+                    className="premium-input" 
+                    placeholder="Search by name or category..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    style={{ maxWidth: '100%', border: '1px solid var(--primary)' }}
+                />
+            </div>
+
+            {/* INVENTORY LIST */}
             <div className="order-list">
-              {products.map(p => (
-                <div key={p.id} className="order-item-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                    <img src={p.image} alt="" style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
-                    <div>
-                      <p style={{ fontWeight: 700 }}>{p.name}</p>
-                      <p style={{ fontSize: '0.8rem', color: 'var(--gray)' }}>{p.category} — ${p.price}</p>
+              {filteredProducts.length > 0 ? (
+                filteredProducts.map(p => (
+                    <div key={p.id} className="order-item-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                        <img src={p.image} alt="" style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
+                        <div>
+                          <p style={{ fontWeight: 700 }}>{p.name}</p>
+                          <p style={{ fontSize: '0.8rem', color: 'var(--gray)' }}>{p.category} — ${p.price}</p>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        <button onClick={() => startEdit(p)} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 700, cursor: 'pointer' }}>Edit</button>
+                        <button onClick={() => handleDeleteProduct(p.id)} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: 700, cursor: 'pointer' }}>Remove</button>
+                      </div>
                     </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button onClick={() => startEdit(p)} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 700, cursor: 'pointer' }}>Edit</button>
-                    <button onClick={() => handleDeleteProduct(p.id)} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: 700, cursor: 'pointer' }}>Remove</button>
-                  </div>
+                  ))
+              ) : (
+                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--gray)' }}>
+                    No products found matching "{searchTerm}"
                 </div>
-              ))}
+              )}
             </div>
           </div>
         )}
