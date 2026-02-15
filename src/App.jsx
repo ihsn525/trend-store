@@ -4,9 +4,10 @@ import Checkout from './Checkout';
 import Auth from './Auth'; 
 import Profile from './Profile'; 
 import AdminDashboard from './AdminDashboard'; 
+import ProductReviews from './ProductReviews'; // 1. IMPORT NEW COMPONENT
 import { auth, db } from './firebase'; 
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, getDocs } from 'firebase/firestore'; 
+import { collection, getDocs, doc, runTransaction } from 'firebase/firestore'; 
 
 function App() {
   const [user, setUser] = useState(null); 
@@ -53,7 +54,7 @@ function App() {
       }
     };
     fetchProducts();
-  }, [view]); // Refetch when view changes (e.g., coming back from Admin or Checkout)
+  }, [view]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -67,6 +68,43 @@ function App() {
     localStorage.setItem("trendstore_cart", JSON.stringify(cart));
   }, [cart]);
 
+  // 2. NEW TRANSACTION LOGIC FOR REVIEWS
+  const handleReviewSubmit = async (productId, rating, comment) => {
+    const productRef = doc(db, "products", productId);
+    const reviewRef = doc(collection(db, "reviews"));
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const productSnap = await transaction.get(productRef);
+        if (!productSnap.exists()) throw "Product missing";
+
+        const pData = productSnap.data();
+        const oldCount = pData.reviewCount || 0;
+        const oldAvg = pData.avgRating || 0;
+
+        const newCount = oldCount + 1;
+        const newAvg = ((oldAvg * oldCount) + rating) / newCount;
+
+        transaction.update(productRef, {
+          reviewCount: newCount,
+          avgRating: Number(newAvg.toFixed(1))
+        });
+
+        transaction.set(reviewRef, {
+          productId,
+          rating,
+          comment,
+          userId: user.uid,
+          userName: user.displayName || user.email.split('@')[0],
+          createdAt: new Date()
+        });
+      });
+      alert("Review posted!");
+    } catch (e) {
+      console.error("Review failed: ", e);
+    }
+  };
+
   const filteredAndSorted = products
     .filter(p => 
       p.name.toLowerCase().includes(search.toLowerCase()) && 
@@ -79,7 +117,6 @@ function App() {
       return 0;
     });
 
-  // UPDATED: Logic to prevent adding more than available stock
   const handleAddToCart = (product) => {
     const existing = cart.find(item => item.id === product.id);
     const currentQtyInCart = existing ? existing.qty : 0;
@@ -98,16 +135,13 @@ function App() {
     }
   };
 
-  // UPDATED: Logic to prevent incrementing beyond stock in sidebar
   const updateQty = (id, delta) => {
     const product = products.find(p => p.id === id);
     const itemInCart = cart.find(item => item.id === id);
-    
     if (delta > 0 && itemInCart.qty >= (Number(product.stock) || 0)) {
         alert("Cannot exceed available stock.");
         return;
     }
-    
     setCart(cart.map(item => 
       item.id === id ? { ...item, qty: Math.max(1, (Number(item.qty) || 1) + delta) } : item
     ));
@@ -141,32 +175,50 @@ function App() {
     <div className="app-container">
       {showToast && <div className="toast">Added to bag! 🛍️</div>}
 
-      {/* Product Detail Modal */}
       {selectedProduct && (
         <div className="modal-overlay" onClick={() => setSelectedProduct(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-content product-modal-layout" onClick={e => e.stopPropagation()}>
             <button className="close-modal-premium" onClick={() => setSelectedProduct(null)}>✕</button>
-            <img src={selectedProduct.image} className="modal-image" alt={selectedProduct.name} />
-            <div className="modal-details">
-              <p className="card-category">{selectedProduct.category}</p>
-              <h2>{selectedProduct.name}</h2>
-              <p className="modal-desc">{selectedProduct.desc}</p>
-              <div className="modal-footer">
-                <span className="modal-price">${Number(selectedProduct.price).toFixed(2)}</span>
-                <button 
-                  className="add-btn-premium" 
-                  disabled={Number(selectedProduct.stock) <= 0}
-                  onClick={() => { handleAddToCart(selectedProduct); setSelectedProduct(null); }}
-                >
-                  {Number(selectedProduct.stock) <= 0 ? "Out of Stock" : "Add to Bag"}
-                </button>
+            
+            <div className="modal-left">
+               <img src={selectedProduct.image} className="modal-image" alt={selectedProduct.name} />
+            </div>
+
+            <div className="modal-right">
+              <div className="modal-details">
+                <p className="card-category">{selectedProduct.category}</p>
+                <h2>{selectedProduct.name}</h2>
+                
+                {/* 3. SHOW THE AVERAGE RATING */}
+                <div className="rating-summary">
+                  <span className="stars">{"★".repeat(Math.round(selectedProduct.avgRating || 0))}</span>
+                  <span className="rating-count">({selectedProduct.reviewCount || 0} reviews)</span>
+                </div>
+
+                <p className="modal-desc">{selectedProduct.desc}</p>
+                <div className="modal-footer">
+                  <span className="modal-price">${Number(selectedProduct.price).toFixed(2)}</span>
+                  <button 
+                    className="add-btn-premium" 
+                    disabled={Number(selectedProduct.stock) <= 0}
+                    onClick={() => { handleAddToCart(selectedProduct); setSelectedProduct(null); }}
+                  >
+                    {Number(selectedProduct.stock) <= 0 ? "Out of Stock" : "Add to Bag"}
+                  </button>
+                </div>
+                
+                {/* 4. INSERT THE REVIEWS COMPONENT */}
+                <ProductReviews 
+                  productId={selectedProduct.id} 
+                  user={user} 
+                  onSubmitReview={handleReviewSubmit} 
+                />
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Cart Sidebar */}
       {isCartOpen && (
         <div className="cart-overlay" onClick={() => setIsCartOpen(false)}>
           <div className="cart-sidebar" onClick={e => e.stopPropagation()}>
@@ -232,8 +284,8 @@ function App() {
         <p>Premium essentials designed for your everyday lifestyle.</p>
       </header>
 
-      <section className="controls-section" style={{ maxWidth: '1000px', margin: '0 auto 40px', background: '#fff', padding: '24px', borderRadius: '24px', boxShadow: '0 10px 25px rgba(0,0,0,0.03)' }}>
-        <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
+      <section className="controls-section">
+        <div className="search-row" style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
           <div style={{ position: 'relative', flex: 1 }}>
             <span style={{ position: 'absolute', left: '18px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }}>🔍</span>
             <input className="search-bar" style={{ width: '100%', paddingLeft: '45px', margin: 0, border: '1px solid #eee' }} placeholder="Search by product name..." value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -248,7 +300,7 @@ function App() {
           </div>
         </div>
 
-        <div className="filter-group" style={{ justifyContent: 'center', borderTop: '1px solid #f5f5f5', paddingTop: '20px' }}>
+        <div className="filter-group">
           {["All", "Tech", "Shoes", "Apparel", "Accessories"].map(cat => (
             <button key={cat} className={`filter-chip ${activeTab === cat ? 'active' : ''}`} onClick={() => setActiveTab(cat)}>{cat}</button>
           ))}
@@ -260,7 +312,6 @@ function App() {
           <div className="loader">Refreshing Collection...</div>
         ) : filteredAndSorted.length > 0 ? (
           filteredAndSorted.map(p => {
-            // UPDATED: MODERN STOCK BADGE LOGIC
             const stockVal = Number(p.stock) || 0;
             let statusClass = "status-high";
             let statusLabel = "In Stock";
@@ -277,20 +328,22 @@ function App() {
               <div key={p.id} className={`product-card ${stockVal === 0 ? 'out-of-stock' : ''}`} onClick={() => setSelectedProduct(p)}>
                 <div className="image-wrapper">
                   <img src={p.image} alt={p.name} className="product-image" />
-                  <div className={`stock-badge ${statusClass}`}>
-                    {statusLabel}
-                  </div>
+                  <div className={`stock-badge ${statusClass}`}>{statusLabel}</div>
                 </div>
                 <div className="card-details">
                   <p className="card-category">{p.category}</p>
                   <h3 className="card-title">{p.name}</h3>
+                  {/* STAR RATING ON CARD */}
+                  <div className="card-rating">
+                    <span className="stars">{"★".repeat(Math.round(p.avgRating || 0))}</span>
+                    <span className="count">({p.reviewCount || 0})</span>
+                  </div>
                   <p className="price-tag">${Number(p.price).toFixed(2)}</p>
                 </div>
                 <button 
                   className="add-btn" 
                   disabled={stockVal === 0}
                   onClick={(e) => { e.stopPropagation(); handleAddToCart(p); }}
-                  style={{ opacity: stockVal === 0 ? 0.6 : 1 }}
                 >
                   {stockVal === 0 ? "Unavailable" : "Add to Bag"}
                 </button>
@@ -298,9 +351,9 @@ function App() {
             );
           })
         ) : (
-          <div className="no-results" style={{ gridColumn: '1/-1', textAlign: 'center', padding: '50px' }}>
-            <p style={{ color: '#999', fontSize: '1.2rem' }}>No products found matching your criteria.</p>
-            <button onClick={() => {setSearch(""); setActiveTab("All")}} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline', marginTop: '10px' }}>Clear all filters</button>
+          <div className="no-results">
+            <p>No products found matching your criteria.</p>
+            <button onClick={() => {setSearch(""); setActiveTab("All")}}>Clear all filters</button>
           </div>
         )}
       </main>
